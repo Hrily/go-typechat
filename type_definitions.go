@@ -8,19 +8,23 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TypeDefinitions are the GoLang type definitions used to translate natural
+// language into JSON
 type TypeDefinitions struct {
 	definitions string
 }
 
+// NewTypeDefinitions from given definitions string
 func NewTypeDefinitions(definitions string) *TypeDefinitions {
 	return &TypeDefinitions{
 		definitions: definitions,
 	}
 }
 
-func NewTypeDefinitionsFromFile(filenames ...string) (*TypeDefinitions, error) {
+// NewTypeDefinitionsFromFile reads type definitions from given files
+func NewTypeDefinitionsFromFile(files ...string) (*TypeDefinitions, error) {
 	buffer := bytes.NewBuffer([]byte{})
-	for _, filename := range filenames {
+	for _, filename := range files {
 		file, err := os.Open(filename)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to open type definitions file")

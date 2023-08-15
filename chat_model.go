@@ -9,8 +9,17 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+// ChatModel is an interface to chat based language model
 type ChatModel interface {
-	Send(ctx context.Context, system string, messages []string) (string, error)
+	Send(ctx context.Context, messages []*ChatModelMessage) (string, error)
+}
+
+// ChatModelMessage is a message to send to the chat model
+// Invariant: one of System, User, or AI must be non-nil
+type ChatModelMessage struct {
+	System *string
+	User   *string
+	AI     *string
 }
 
 type openAIChatModel struct {
@@ -18,6 +27,7 @@ type openAIChatModel struct {
 	model  string
 }
 
+// NewOpenAIChatModel ...
 func NewOpenAIChatModel() ChatModel {
 	model := openai.GPT3Dot5Turbo
 	if modelEnv := os.Getenv("OPENAI_MODEL"); modelEnv != "" {
@@ -31,20 +41,17 @@ func NewOpenAIChatModel() ChatModel {
 	}
 }
 
+// Send messages to the chat model and return the response
 func (m *openAIChatModel) Send(
-	ctx context.Context, system string, messages []string,
+	ctx context.Context, messages []*ChatModelMessage,
 ) (string, error) {
-	msgs := []openai.ChatCompletionMessage{
-		{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: system,
-		},
-	}
+	msgs := make([]openai.ChatCompletionMessage, 0, len(messages))
 	for _, message := range messages {
-		msgs = append(msgs, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: message,
-		})
+		openAIMessage, err := m.toOpenAIMessage(message)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to create message")
+		}
+		msgs = append(msgs, *openAIMessage)
 	}
 
 	resp, err := m.client.CreateChatCompletion(
@@ -62,4 +69,28 @@ func (m *openAIChatModel) Send(
 	}
 
 	return resp.Choices[0].Message.Content, nil
+}
+
+func (m *openAIChatModel) toOpenAIMessage(
+	message *ChatModelMessage,
+) (*openai.ChatCompletionMessage, error) {
+	switch {
+	case message.System != nil:
+		return &openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: *message.System,
+		}, nil
+	case message.User != nil:
+		return &openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleUser,
+			Content: *message.User,
+		}, nil
+	case message.AI != nil:
+		return &openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: *message.AI,
+		}, nil
+	default:
+		return nil, fmt.Errorf("invalid message")
+	}
 }
